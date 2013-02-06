@@ -137,4 +137,7 @@ module Make = functor (Site : SITE) -> struct
   let prune f t =
     List.filter (fun c -> f c.s) t
 
+  let to_list = List.map (fun c -> (c.s, c.n))
+  let from_list = List.map (fun (s, n) -> {s; n})
+
 end
