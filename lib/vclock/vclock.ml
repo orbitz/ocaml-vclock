@@ -66,6 +66,14 @@ module Make = functor (Site : SITE) -> struct
       | (r1, r2) when r1 = r2 -> r1
       | (_, _)                -> Ordering.Concurrent
 
+  (*
+   * If a site for a clock is in another vector clock
+   * then compare the n value's and the ordering depends
+   * on how that compares.
+   * If it is not, then the clock entry indicates that the
+   * vclock it came from is newer than the one we're comparing
+   * to, thus it is greater than
+   *)
   let compare_clocks ordering c1 t =
     match take (fun c -> Site.equal c1.s c.s) t with
       | Some (c2, t) ->
@@ -75,11 +83,22 @@ module Make = functor (Site : SITE) -> struct
 	let o = ord ordering Ordering.Gt in
 	(o, t)
 
+  (*
+   * To compare vector clocks we maintain an ordering
+   * and then update the ordering until we get to an end.
+   * We start assuming the two vclocks are equal, then
+   * update the ordering as we go.  The first 3 cases are
+   * pretty obvious, the tricky one is if we have two
+   * vclocks with values in it, in which case we take a
+   * clock from one of the vclocks, compare that to the
+   * associated clock in the other vclock, update the
+   * ordering, then compare the remainder of the vclocks
+   *)
   let rec compare_rel ordering t1 t2 =
     match (t1, t2) with
       | (_::_,   []  ) -> ord ordering Ordering.Gt
       | ([],     _::_) -> ord ordering Ordering.Lt
-      | ([],     []  ) -> r
+      | ([],     []  ) -> ordering
       | (c::cs, t) -> begin
 	let (ordering, rest) = compare_clocks ordering c t in
 	compare_rel ordering cs rest
@@ -87,6 +106,10 @@ module Make = functor (Site : SITE) -> struct
 
   let compare = compare_rel Ordering.Eq
 
+  (*
+   * Find the site in the vclock and update it otherwise
+   * add it to the vclock
+   *)
   let rec increment s = function
     | [] ->
       [{ s = s; n = 1}]
@@ -95,6 +118,10 @@ module Make = functor (Site : SITE) -> struct
     | c::cs ->
       c::(increment s cs)
 
+  (*
+   * For a clocks in two vclocks merge them together.  If
+   * a clock is in both vclocks, take the highest value
+   *)
   let rec merge t1 t2 =
     match (t1, t2) with
       | ([], t2)    -> t2
