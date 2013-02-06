@@ -55,30 +55,34 @@ module Make = functor (Site : SITE) -> struct
 
   let empty = []
 
-  let rel r1 r2 =
+  (*
+   * Compare two orderings and return the least
+   * strong ordering of the two
+   *)
+  let ord r1 r2 =
     match (r1, r2) with
       | (Ordering.Eq, rel)    -> rel
       | (rel, Ordering.Eq)    -> rel
       | (r1, r2) when r1 = r2 -> r1
       | (_, _)                -> Ordering.Concurrent
 
-  let compare_clocks r c1 t =
+  let compare_clocks ordering c1 t =
     match take (fun c -> Site.equal c1.s c.s) t with
       | Some (c2, t) ->
-	let r = rel r (compare_n c1.n c2.n) in
-	(r, t)
+	let o = ord ordering (compare_n c1.n c2.n) in
+	(o, t)
       | None ->
-	let r = rel r Ordering.Gt in
-	(r, t)
+	let o = ord ordering Ordering.Gt in
+	(o, t)
 
-  let rec compare_rel r t1 t2 =
+  let rec compare_rel ordering t1 t2 =
     match (t1, t2) with
-      | (_::_,   []  ) -> rel r Ordering.Gt
-      | ([],     _::_) -> rel r Ordering.Lt
+      | (_::_,   []  ) -> ord ordering Ordering.Gt
+      | ([],     _::_) -> ord ordering Ordering.Lt
       | ([],     []  ) -> r
       | (c::cs, t) -> begin
-	let (rel, rest) = compare_clocks r c t in
-	compare_rel rel cs rest
+	let (ordering, rest) = compare_clocks ordering c t in
+	compare_rel ordering cs rest
       end
 
   let compare = compare_rel Ordering.Eq
