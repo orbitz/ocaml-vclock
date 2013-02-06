@@ -62,19 +62,23 @@ module Make = functor (Site : SITE) -> struct
       | (r1, r2) when r1 = r2 -> r1
       | (_, _)                -> Ordering.Concurrent
 
+  let compare_clocks r c1 t =
+    match take (fun c -> Site.equal c1.s c.s) t with
+      | Some (c2, t) ->
+	let r = rel r (compare_n c1.n c2.n) in
+	(r, t)
+      | None ->
+	let r = rel r Ordering.Gt in
+	(r, t)
+
   let rec compare_rel r t1 t2 =
     match (t1, t2) with
       | (_::_,   []  ) -> rel r Ordering.Gt
       | ([],     _::_) -> rel r Ordering.Lt
       | ([],     []  ) -> r
-      | (x1::xs, t) -> begin
-	match take (fun c -> Site.equal x1.s c.s) t with
-	  | Some (x2, t) ->
-	    let r = rel r (compare_n x1.n x2.n) in
-	    compare_rel r xs t
-	  | None ->
-	    let r = rel r Ordering.Gt in
-	    compare_rel r xs t
+      | (c::cs, t) -> begin
+	let (rel, rest) = compare_clocks r c t in
+	compare_rel rel cs rest
       end
 
   let compare = compare_rel Ordering.Eq
@@ -82,21 +86,21 @@ module Make = functor (Site : SITE) -> struct
   let rec increment s = function
     | [] ->
       [{ s = s; n = 1}]
-    | x::xs when Site.equal x.s s ->
-      {x with n = x.n + 1}::xs
-    | x::xs ->
-      x::(increment s xs)
+    | c::cs when Site.equal c.s s ->
+      {c with n = c.n + 1}::cs
+    | c::cs ->
+      c::(increment s cs)
 
   let rec merge t1 t2 =
     match (t1, t2) with
       | ([], t2)    -> t2
       | (t1, [])    -> t1
-      | (t::ts, t2) -> begin
-	match find (fun c -> Site.equal c.s t.s) t2 with
+      | (c::cs, t2) -> begin
+	match find (fun clock -> Site.equal clock.s c.s) t2 with
 	  | Some clock ->
-	    {clock with n = max t.n clock.n}::(merge ts t2)
+	    {clock with n = max c.n clock.n}::(merge cs t2)
 	  | None ->
-	    t::(merge ts t2)
+	    c::(merge cs t2)
       end
 
   let prune f t =
