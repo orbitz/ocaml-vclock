@@ -10,12 +10,6 @@ end
 (*
  * Some helpful functions
  *)
-let max i1 i2 =
-  if i1 < i2 then
-    i2
-  else
-    i1
-
 let find f x =
   try
     Some (List.find f x)
@@ -39,6 +33,12 @@ let compare_n n1 n2 =
     | (n1, n2) when n1 < n2 -> Ordering.Lt
     | (n1, n2) when n1 > n2 -> Ordering.Gt
     | _                     -> Ordering.Eq
+
+let clock_max c1 c2 =
+  if c1.n < c2.n then
+    c2
+  else
+    c1
 
 module type SITE = sig
   type t
@@ -108,19 +108,23 @@ module Make = functor (Site : SITE) -> struct
 
   (*
    * Find the site in the vclock and update it otherwise
-   * add it to the vclock
+   * add it to the vclock.  The site passed in is the one
+   * the update uses, this way if there is more data
+   * encoded in the site it will be the latest version
+   * (hint: encoding timestamps for pruning)
    *)
   let rec increment s = function
     | [] ->
       [{ s = s; n = 1}]
     | c::cs when Site.equal c.s s ->
-      {c with n = c.n + 1}::cs
+      {c with s = s; n = c.n + 1}::cs
     | c::cs ->
       c::(increment s cs)
 
   (*
    * For a clocks in two vclocks merge them together.  If
-   * a clock is in both vclocks, take the highest value
+   * a clock is in both vclocks, take the clock with the highest
+   * n value
    *)
   let rec merge t1 t2 =
     match (t1, t2) with
@@ -129,7 +133,7 @@ module Make = functor (Site : SITE) -> struct
       | (c::cs, t2) -> begin
 	match find (fun clock -> Site.equal clock.s c.s) t2 with
 	  | Some clock ->
-	    {clock with n = max c.n clock.n}::(merge cs t2)
+	    (clock_max c clock)::(merge cs t2)
 	  | None ->
 	    c::(merge cs t2)
       end
